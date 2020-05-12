@@ -263,6 +263,7 @@ def minimize(*args, **kwargs):
 
 def minimizeSPSA(func, x0, args=(), bounds=None, niter=100, paired=True,
                  a=1.0, alpha=0.602, c=1.0, gamma=0.101,
+                 terminate_early=False, true_minimum=None, tol=1e-4,
                  disp=False, callback=None):
     """
     Minimization of an objective function by a simultaneous perturbation
@@ -304,6 +305,12 @@ def minimizeSPSA(func, x0, args=(), bounds=None, niter=100, paired=True,
        scaling parameter for evaluation step size
     gamma: float
         scaling exponent for evaluation step size 
+    terminate_early: boolean
+        whether to terminate optimization early if sufficiently close to a specified true optimum 
+    true_minimum: float
+        desired minimum value of objective function
+    tol: float
+        if terminate_early, distance to the true minimum at which we will terminate
     disp: boolean
         whether to output status updates during the optimization
     callback: callable
@@ -324,8 +331,14 @@ def minimizeSPSA(func, x0, args=(), bounds=None, niter=100, paired=True,
         def funcf(x, **kwargs):
             return func(x, *args, **kwargs)
 
+    # ODM
+    if terminate_early:
+        if true_minimum is None:
+            raise ValueError("Please specify an optimum value for early SPSA termination.")
+
     N = len(x0)
     x = x0
+    niter_exec = 0
     for k in range(niter):
         ak = a/(k+1.0+A)**alpha
         ck = c/(k+1.0)**gamma
@@ -349,8 +362,20 @@ def minimizeSPSA(func, x0, args=(), bounds=None, niter=100, paired=True,
             print(x)
         if callback is not None:
             callback(x)
-    message = 'terminated after reaching max number of iterations'
-    return OptimizeResult(fun=funcf(x), x=x, nit=niter, nfev=2*niter, message=message, success=True)
+
+        niter_exec += 1
+
+        # ODM check for early termination
+        if terminate_early:
+            if np.abs(funcf(x) - true_minimum) < tol:
+                break
+    
+    if niter_exec == niter:
+        message = 'terminated after reaching max number of iterations'
+    else:
+        message = f'terminated after reaching minimum to within tolerance {tol}'
+    #return OptimizeResult(fun=funcf(x), x=x, nit=niter, nfev=2*niter, message=message, success=True)
+    return OptimizeResult(fun=funcf(x), x=x, nit=niter_exec, nfev=2*niter_exec, message=message, success=True)
 
 class AverageBase(object):
     """
